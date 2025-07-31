@@ -1,3 +1,8 @@
+"""
+Author: Saurabh Kumbhar
+Date: July 29th, 2025
+"""
+
 from dotenv import load_dotenv
 from twilio.rest import Client
 import requests
@@ -8,10 +13,9 @@ load_dotenv()
 
 account_sid = os.getenv("TWILIO_ACCOUNT_SID")
 auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-base_url = os.getenv("PUBLIC_DOMAIN")
+base_url = os.getenv("PUBLIC_DOMAIN") #ngrok http 6060 tunnel domain
 number = os.getenv("TWILIO_PHONE_NUMBER")
-sheet_url = os.getenv("SHEET_URL")
-gapp_url = os.getenv("GAPP_URL")
+gapp_url = os.getenv("GAPP_URL") #Google App Script to store value in GSheet (For testing purpose storing values)
 my_phone = os.getenv("MY_PHONE")
 
 client = Client(account_sid, auth_token)
