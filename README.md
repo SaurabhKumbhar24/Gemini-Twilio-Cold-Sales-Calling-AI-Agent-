@@ -1,7 +1,6 @@
 # Gemini-Twilio Cold Sales Calling AI Agent
 
-# Cold Calling Sales Agent
-
+Gemini Live Api
 
 This project is a voice-enabled AI sales assistant that automatically initiates and handles cold sales calls using **Twilio**, **Gemini (Google AI)**, and **FastAPI**. It acts as a friendly and persuasive sales rep for your company, records real-time transcripts, and stores them in a **public Google Sheet** via a **Google Apps Script endpoint** — all without needing OAuth.
 
