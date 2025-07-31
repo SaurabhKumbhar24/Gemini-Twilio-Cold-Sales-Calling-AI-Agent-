@@ -7,13 +7,13 @@ from fastapi.responses import HTMLResponse
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.websockets import WebSocketDisconnect
 from twilio.twiml.voice_response import VoiceResponse, Connect
-from utils import convert_audio_to_mulaw, convert_mulaw_to_pcm_16k
+from utils import convert_audio_to_mulaw, convert_mulaw_to_pcm_16k, save_details
 
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MODEL = 'gemini-2.5-flash-preview-native-audio-dialog'
-PORT = int(os.getenv('PORT', 6060))
+GEMINI_VOICE = "Achernar"
 ASSISTANT_NAME = "Emily"
 
 SYSTEM_MESSAGE = [
@@ -22,7 +22,8 @@ SYSTEM_MESSAGE = [
     "You MUST follow these Rules:",
     "-  Always respond in a friendly, conversational tone.",
     "-  If the user says they’re interested but only mentions a vague time (like \"next week\" or \"sometime later\"), politely ask for a **specific day & time**.",
-    "-  When the user agrees to book a meeting or ends the call, politely say goodbye and end the conversation by saying: 'Thank you for your time. Goodbye.'"
+    "-  When the user agrees to book a meeting or ends the call, politely say goodbye and end the conversation by saying: 'Thank you for your time. Goodbye.'",
+    "-  Even if the user does'nt agrees to book a meeting, politely say goodbye and end the conversation by saying: 'Thank you for your time. Goodbye.'"
 ]
     
 CONFIG = {
@@ -31,7 +32,7 @@ CONFIG = {
     "speech_config":{
         "voice_config":{
             "prebuilt_voice_config":{
-                "voice_name":"Achernar"
+                "voice_name":GEMINI_VOICE
             }
         },
         "language_code":"en-US"
@@ -67,6 +68,9 @@ async def handle_media_stream(twilio_ws: WebSocket):
     async with client.aio.live.connect(model=MODEL, config=CONFIG) as gemini_ws:
 
         stream_sid = None
+        call_sid = None
+        full_transcript = []
+
         await gemini_ws.send_client_content(turns={
             "parts": [
                 {"text": f"Start the conversation by saying: 'Hello, this is {ASSISTANT_NAME} from Tarifflo. How are you today?'"}
@@ -74,13 +78,14 @@ async def handle_media_stream(twilio_ws: WebSocket):
             })
 
         async def receive_from_twilio():
-            nonlocal stream_sid
+            nonlocal stream_sid, call_sid
             try:
                 async for message in twilio_ws.iter_text():
                 
                     data = json.loads(message)
                     if data['event'] == 'start':
                         stream_sid = data['start']['streamSid']
+                        call_sid = data['start'].get('callSid')
 
                     if data['event'] == 'media':
                         audio_data = convert_mulaw_to_pcm_16k(data['media']['payload'])
@@ -92,6 +97,7 @@ async def handle_media_stream(twilio_ws: WebSocket):
                         )
 
                     if data['event'] == 'stop':
+                        save_details(transcript=" ".join(full_transcript), call_sid=call_sid)
                         print("stream stopped")
 
             except WebSocketDisconnect:
@@ -99,7 +105,7 @@ async def handle_media_stream(twilio_ws: WebSocket):
                     if gemini_ws.open:
                         await gemini_ws.close()
 
-        full_transcript = []
+        
         async def send_to_twilio():
             nonlocal stream_sid
             try:
@@ -110,11 +116,13 @@ async def handle_media_stream(twilio_ws: WebSocket):
 
                         if response.server_content.input_transcription:
                             text = response.server_content.input_transcription.text
-                            human_transcript += text + " "
+                            if text:
+                                human_transcript += text.strip() + " "
 
                         if response.server_content.output_transcription:
                             text = response.server_content.output_transcription.text
-                            ai_transcript += text + " "
+                            if text:
+                                ai_transcript += text.strip() + " "
                         
                         if response.server_content.model_turn:
                             data = response.server_content.model_turn.parts[0].inline_data.data
@@ -131,12 +139,10 @@ async def handle_media_stream(twilio_ws: WebSocket):
                                 await twilio_ws.send_json(payload)
 
                                 if "goodbye" in (" ".join(full_transcript)).lower():
-                                    print(f"Full Transcript: {" ".join(full_transcript)}")
                                     await twilio_ws.close()
                                     await gemini_ws.close()
 
                     full_transcript.append(f"AI: {ai_transcript}\nHuman: {human_transcript}\n")    
-
 
             except Exception as e:
                 print(f"Unexpected error in gemini websocket: {e}")
@@ -145,5 +151,6 @@ async def handle_media_stream(twilio_ws: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+    PORT = int(os.getenv('PORT', 6060))
     print("Starting Uvicorn server...")
     uvicorn.run(app, host="0.0.0.0", port=PORT)

@@ -1,6 +1,9 @@
 import base64
 import audioop
 import numpy as np
+import requests
+import os
+from dotenv import load_dotenv
 from scipy.signal import resample
 
 def convert_audio_to_mulaw(audio_data: bytes) -> str:
@@ -21,3 +24,16 @@ def convert_mulaw_to_pcm_16k(mulaw_base64: str) -> bytes:
     pcm_16k = pcm_16k_np.astype(np.int16).tobytes()
 
     return pcm_16k
+
+load_dotenv()
+gapp_url = os.getenv("GAPP_TRANSCRIPT_URL")
+def save_details(transcript, call_sid):
+    data = {
+        "call_sid": call_sid,
+        "transcript": transcript
+    }
+    try:
+        response = requests.post(gapp_url, json=data)
+        print("Google Sheet response:", response.text)
+    except Exception as e:
+        print("Failed to send to Google Sheet:", e)
